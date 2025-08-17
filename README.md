@@ -1,3 +1,35 @@
-# Streamlit Demo App
+# AI 기반 스크린샷 정보 추출 시스템 (AI-based Screenshot Insight Extractor)
 
-For video tutorial: [Streamlit: The Fastest Way To Build Python Apps?](https://www.youtube.com/watch?v=D0D4Pa22iG0&lc=Ugz_mHQgRHlnn1BJqlx4AaABAg)
+AI 기술과 확장 가능한 클라우드 아키텍처를 적용하여, 스크린샷 속 비활성화된 이미지로부터 유의미한 정보를 추출하는 실용적인 솔루션을 구축한다.
+
+## 1. 프로젝트 개요
+일상에서 생성되는 스크린샷은 유용한 데이터를 포함하지만 대부분 활용되지 않는다. 본 프로젝트는 OCR 및 LLM 기술을 통합한 자동화 서비스를 통해 이미지 속 텍스트를 정보 자산으로 변환하는 것을 목표로 한다.
+
+이는 단순 API 호출을 넘어, 실제 문제 해결을 위한 시스템을 설계하고 점진적으로 고도화하는 과정을 담고자 한다.
+
+## 2. 아키텍처 설계
+본 시스템은 확장성을 고려하여 3단계의 고도화 과정을 거쳐 개발한다. 각 기능 모듈을 독립적으로 설계하여, 변화하는 요구사항에 유연하게 대응하고 시스템의 안정성과 처리 용량을 점진적으로 확보하는 것을 목표로 한다.
+
+### Phase 1: MVP 구현 (현재 단계)
++ 목표: 핵심 기능(이미지 업로드 → OCR → LLM 요약)의 기술적 타당성을 신속하게 검증한다.
+
++ 구조: Streamlit 기반의 단일 서버에서 모든 로직을 동기적으로 처리하는 모놀리식 구조를 채택한다. 이 방식은 신속한 개발에 용이하나, 대규모 요청 처리에는 한계가 있다.
+
+### Phase 2: 기능 분리 및 비동기 처리
++ 목표: UI 서버와 핵심 로직을 분리하여 시스템 안정성 및 확장성을 확보한다.
+
++ 구조: S3와 Lambda를 이용한 이벤트 기반 비동기 처리 구조를 도입하여 UI 서버의 부하를 최소화한다. 분석 결과는 DynamoDB에 저장하여 빠른 조회를 지원한다.
+
+### Phase 3: 대규모 트래픽 대응
++ 목표: 실제 서비스 수준의 대규모 트래픽을 안정적으로 처리할 수 있는 고가용성 아키텍처를 구현한다.
+
++ 구조: 클라이언트가 Pre-signed URL을 통해 S3에 직접 업로드하고, SQS를 통해 요청을 안정적으로 제어하여 시스템 전체의 유연성을 더한다.
+
+## 3. 적용 기술
++ Frontend: Streamlit
++ Backend: Python
++ Cloud: AWS (S3, Lambda, SQS)
++ Database: DynamoDB
++ AI / ML:
+    + OCR: pytesseract/Naver Clova OCR (초기), AWS Textract (확장)
+    + LLM: OpenAI GPT API (gpt-3.5-turbo, gpt-4)
