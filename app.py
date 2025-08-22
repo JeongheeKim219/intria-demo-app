@@ -1,14 +1,13 @@
 import streamlit as st
 from PIL import Image
-# src 폴더에 있는 우리만의 유틸리티 함수들을 임포트합니다.
 from src.aws_utils import upload_file_to_s3
-from src.processing import analyze_image_with_ai # (가상) AI 분석 함수
-from src.ui_components import display_analysis_results # (가상) UI 출력 함수
+# from src.processing import analyze_image_with_ai
+# from src.ui_components import display_analysis_results
 
 # --- 1. 페이지 기본 설정 ---
 st.set_page_config(
     page_title="AI 스크린샷 정보 추출기",
-    page_icon="🤖",
+    page_icon="🧐",
     layout="wide"
 )
 
@@ -25,7 +24,7 @@ with st.sidebar:
     )
 
 # --- 3. 메인 화면 UI ---
-st.title("🤖 AI 스크린샷 정보 추출기")
+st.title("AI 스크린샷 정보 추출기")
 st.markdown("---")
 
 # 파일 업로더 위젯
@@ -40,7 +39,7 @@ if uploaded_file is not None:
 
     with col1:
         st.subheader("🖼️ 원본 이미지")
-        st.image(uploaded_file, caption="업로드된 이미지", use_column_width=True)
+        st.image(uploaded_file, caption="업로드된 이미지", use_container_width=True)
 
     with col2:
         st.subheader("🔍 분석 실행")
@@ -53,24 +52,21 @@ if uploaded_file is not None:
                 # 실제 로직은 src/aws_utils.py에 있는 함수를 호출합니다.
                 s3_file_url = upload_file_to_s3(uploaded_file)
 
-            # 2단계: S3 업로드 성공 시 AI 분석 실행
-            if s3_file_url:
-                st.info(f"S3 업로드 완료: {s3_file_url}")
-                with st.spinner("AI가 이미지를 분석하고 있습니다... (OCR, LLM)"):
-                    # 실제 AI 처리 로직은 src/processing.py에 있는 함수를 호출합니다.
-                    # 이 함수는 S3 URL을 받아 Lambda를 트리거하거나 직접 처리할 수 있습니다.
-                    analysis_result = analyze_image_with_ai(s3_file_url)
+            # # 2단계: S3 업로드 성공 시 AI 분석 실행
+            # if s3_file_url:
+            #     st.info(f"S3 업로드 완료: {s3_file_url}")
+            #     with st.spinner("AI가 이미지를 분석하고 있습니다... (OCR, LLM)"):
+            #         # 실제 AI 처리 로직은 src/processing.py에 있는 함수를 호출합니다.
+            #         # 이 함수는 S3 URL을 받아 Lambda를 트리거하거나 직접 처리할 수 있습니다.
+            #         analysis_result = analyze_image_with_ai(s3_file_url)
 
-            # 3단계: 분석 결과 출력
-            if analysis_result:
-                st.success("✅ 분석이 완료되었습니다!")
-                # 실제 결과 출력 UI는 src/ui_components.py에 있는 함수를 호출합니다.
-                display_analysis_results(analysis_result)
-            else:
-                st.error("분석 과정에서 오류가 발생했습니다.")
+            # # 3단계: 분석 결과 출력
+            # if analysis_result:
+            #     st.success("✅ 분석이 완료되었습니다!")
+            #     # 실제 결과 출력 UI는 src/ui_components.py에 있는 함수를 호출합니다.
+            #     display_analysis_results(analysis_result)
+            # else:
+            #     st.error("분석 과정에서 오류가 발생했습니다.")
 else:
     st.warning("이미지를 업로드하여 분석을 시작하세요.")
 
-```
-
-이 `app.py` 코드는 이제 프로젝트의 전체 흐름을 명확하게 보여주는 '지휘자' 역할을 합니다. 실제 파일 처리, AI 분석, 결과 출력과 같은 복잡한 작업들은 각각의 전문화된 `src` 폴더 안의 파일들에게 위임하여 코드의 가독성과 유지보수성을 크게 높였습
