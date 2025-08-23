@@ -1,7 +1,7 @@
 import streamlit as st
 from PIL import Image
 from src.aws_utils import upload_file_to_s3
-# from src.processing import analyze_image_with_ai
+from src.ocr_utils import extract_text_with_clova_ocr
 # from src.ui_components import display_analysis_results
 
 # --- 1. 페이지 기본 설정 ---
@@ -58,13 +58,14 @@ if uploaded_files:
                     # S3 업로드 성공 시 OCR 분석 실행
                     if s3_file_url:
                         st.info(f"S3 업로드 완료. OCR 분석을 시작합니다.")
-                    #     with st.spinner("AI가 이미지에서 텍스트를 읽고 있습니다..."):
-                    #         extracted_text = extract_text_from_image_in_s3(s3_file_url)
+                        with st.spinner("이미지에서 텍스트를 읽고 있습니다..."):
+                            st.write(s3_file_url)
+                            extracted_text = extract_text_with_clova_ocr(s3_file_url)
 
-                    # # OCR 결과 출력
-                    # if extracted_text:
-                    #     st.subheader("📄 OCR 추출 결과")
-                    #     # 각 text_area는 고유한 key를 가져야 하므로 파일 이름을 사용합니다.
-                    #     st.text_area("OCR Text", extracted_text, height=200, key=f"text_for_{uploaded_file.name}")
-                    # elif s3_file_url: # OCR 실패했지만 S3 업로드는 성공한 경우
-                    #     st.error("텍스트 추출에 실패했습니다.")
+                    # OCR 결과 출력
+                    if extracted_text:
+                        st.subheader("📄 OCR 추출 결과")
+                        # 각 text_area는 고유한 key를 가져야 하므로 파일 이름을 사용합니다.
+                        st.text_area("OCR Text", extracted_text, height=200, key=f"text_for_{uploaded_file.name}")
+                    elif s3_file_url: # OCR 실패했지만 S3 업로드는 성공한 경우
+                        st.error("텍스트 추출에 실패했습니다.")
