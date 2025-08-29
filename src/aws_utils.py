@@ -31,7 +31,7 @@ def upload_file_to_s3(uploaded_file):
 
     bucket_name = st.secrets["aws"]["aws_storage_bucket_name"]
     file_name, file_extension = os.path.splitext(uploaded_file.name)
-    object_name = f"uploads/{file_name}_{uuid.uuid4()}{file_extension}"
+    object_name = f"uploads/{uuid.uuid4()}{file_extension}"
     aws_region_name = st.secrets["aws"]["aws_region_name"]
 
 

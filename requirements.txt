@@ -1,4 +1,5 @@
 matplotlib
 streamlit
 pandas
-boto3 
+boto3
+openai
