@@ -2,6 +2,7 @@ import streamlit as st
 from PIL import Image
 from src.aws_utils import upload_file_to_s3
 from src.ocr_utils import extract_text_with_clova_ocr
+from src.ai_utils import analyze_text_with_gpt
 # from src.ui_components import display_analysis_results
 
 # --- 1. 페이지 기본 설정 ---
@@ -67,5 +68,14 @@ if uploaded_files:
                         st.subheader("📄 OCR 추출 결과")
                         # 각 text_area는 고유한 key를 가져야 하므로 파일 이름을 사용합니다.
                         st.text_area("OCR Text", extracted_text, height=200, key=f"text_for_{uploaded_file.name}")
-                    elif s3_file_url: # OCR 실패했지만 S3 업로드는 성공한 경우
+                        with st.spinner("GPT가 텍스트를 분석하고 있습니다..."):
+                            analysis_result = analyze_text_with_gpt(extracted_text)
+                            
+                    # GPT 분석 결과 출력
+                    if analysis_result:
+                        st.success("✅ GPT 구조화 분석 성공!")
+                        st.json(analysis_result) # JSON 결과를 예쁘게 보여줍니다.
+                    elif extracted_text: # GPT는 실패했지만 OCR은 성공한 경우
+                        st.error("GPT 분석에 실패했습니다.")
+                    elif s3_file_url: # OCR부터 실패한 경우
                         st.error("텍스트 추출에 실패했습니다.")
