@@ -14,6 +14,7 @@ def get_s3_client():
             aws_access_key_id=st.secrets["aws"]["aws_access_key_id"],
             aws_secret_access_key=st.secrets["aws"]["aws_secret_access_key"],
             region_name=st.secrets["aws"]["aws_region_name"]
+
         )
         return s3_client
     except Exception as e:
@@ -45,6 +46,7 @@ def upload_file_to_s3(uploaded_file):
         )
         
         file_url = f"https://{bucket_name}.s3.{aws_region_name}.amazonaws.com/{object_name}"
+
         
         st.success(f"'{uploaded_file.name}' 파일이 S3에 성공적으로 업로드되었습니다.")
         return file_url

@@ -3,7 +3,7 @@ from PIL import Image
 from src.aws_utils import upload_file_to_s3
 from src.ocr_utils import extract_text_with_clova_ocr
 from src.ai_utils import analyze_text_with_gpt
-# from src.ui_components import display_analysis_results
+
 
 # --- 1. 페이지 기본 설정 ---
 st.set_page_config(
