@@ -1,13 +1,16 @@
+import logging
 import streamlit as st
-import requests 
+import requests
 import json
 import uuid
 import time
 
+logger = logging.getLogger(__name__)
+
 
 # --- Naver Clova OCR 연동 함수 (수정) ---
 def extract_text_with_clova_ocr(s3_url):
-    print(s3_url)
+    logger.debug("Processing S3 URL: %s", s3_url)
     """
     S3에 저장된 이미지의 URL을 Naver Clova OCR API로 전송하여 텍스트를 추출합니다.
     """
@@ -51,10 +54,13 @@ def extract_text_with_clova_ocr(s3_url):
         return all_text.strip()
 
     except requests.exceptions.HTTPError as http_err:
+        logger.error("Clova OCR API HTTP error: %s", http_err)
         st.error(f"Clova OCR API HTTP 오류 발생: {http_err}")
         st.error(f"응답 내용: {response.text}")
+        logger.debug("Response content: %s", response.text)
         return None
     except Exception as e:
+        logger.exception("Clova OCR processing error")
         st.error(f"Clova OCR 처리 중 오류 발생: {e}")
         return None
 
