@@ -4,6 +4,9 @@ from src.aws_utils import upload_file_to_s3
 from src.ocr_utils import extract_text_with_clova_ocr
 from src.ai_utils import analyze_text_with_gpt
 
+if "history" not in st.session_state:
+    st.session_state["history"] = []
+
 
 # --- 1. 페이지 기본 설정 ---
 st.set_page_config(
@@ -80,3 +83,13 @@ if uploaded_files:
                         st.error("GPT 분석에 실패했습니다.")
                     elif s3_file_url: # OCR부터 실패한 경우
                         st.error("텍스트 추출에 실패했습니다.")
+
+                    st.session_state["history"].append(
+                        {
+                            "filename": uploaded_file.name,
+                            "s3_url": s3_file_url,
+                            "extracted_text": extracted_text,
+                            "analysis_result": analysis_result,
+                        }
+                    )
+
