@@ -33,3 +33,10 @@ AI 기술과 확장 가능한 클라우드 아키텍처를 적용하여, 스크�
 + AI / ML:
     + OCR: pytesseract/Naver Clova OCR (초기), AWS Textract (확장)
     + LLM: OpenAI GPT API (gpt-3.5-turbo, gpt-4)
+## 테스트 실행
+필요한 패키지를 설치하고 Pytest로 단위 테스트를 실행할 수 있습니다.
+
+```bash
+pip install -r requirements.txt
+pytest
+```
