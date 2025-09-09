@@ -2,7 +2,7 @@ import streamlit as st
 from PIL import Image
 from src.aws_utils import upload_file_to_s3
 from src.ocr_utils import extract_text_with_clova_ocr
-from src.ai_utils import analyze_text_with_gpt
+from src.ai_utils import analyze_text_objective, aggregate_user_profile
 
 if "history" not in st.session_state:
     st.session_state["history"] = []
@@ -39,15 +39,21 @@ uploaded_files = st.file_uploader(
 )
 
 
-# uploaded_files는 이제 단일 파일이 아닌 파일 리스트입니다.
 if uploaded_files:
     st.subheader("🔍 분석 실행")
     if st.button(f"{len(uploaded_files)}개 파일 분석 시작하기"):
-        # 각 파일에 대한 처리 과정을 깔끔하게 보여주기 위해 st.expander를 사용합니다.
+        batch_objectives = []
+        # 전역 진행 상황 표시 (많은 이미지 처리 시 유용)
+        total_images = len(uploaded_files)
+        processed_count = 0
+        success_count = 0
+        progress_container = st.container()
+        status_text = progress_container.empty()
+        progress_bar = progress_container.progress(0)
+
         for uploaded_file in uploaded_files:
-            with st.expander(f"'{uploaded_file.name}' 분석 결과", expanded=True):
+            with st.expander(f"'{uploaded_file.name}' 분석 결과", expanded=False):
                 
-                # UI를 두 개의 컬럼으로 나누어 이미지와 결과를 나란히 표시합니다.
                 col1, col2 = st.columns(2)
                 with col1:
                     st.image(uploaded_file, caption="업로드된 이미지", use_container_width=True)
@@ -55,7 +61,7 @@ if uploaded_files:
                 with col2:
                     s3_file_url = None
                     extracted_text = None
-                    analysis_result = None
+                    objective_result = None
 
                     with st.spinner("파일을 S3에 업로드하는 중..."):
                         s3_file_url = upload_file_to_s3(uploaded_file)
@@ -70,26 +76,47 @@ if uploaded_files:
                     # OCR 결과 출력
                     if extracted_text:
                         st.subheader("📄 OCR 추출 결과")
-                        # 각 text_area는 고유한 key를 가져야 하므로 파일 이름을 사용합니다.
                         st.text_area("OCR Text", extracted_text, height=200, key=f"text_for_{uploaded_file.name}")
-                        with st.spinner("GPT가 텍스트를 분석하고 있습니다..."):
-                            analysis_result = analyze_text_with_gpt(extracted_text)
+                        with st.spinner("이미지별 분석을 수행 중..."):
+                            objective_result = analyze_text_objective(extracted_text)
                             
-                    # GPT 분석 결과 출력
-                    if analysis_result:
-                        st.success("✅ GPT 구조화 분석 성공!")
-                        st.json(analysis_result) # JSON 결과를 예쁘게 보여줍니다.
-                    elif extracted_text: # GPT는 실패했지만 OCR은 성공한 경우
-                        st.error("GPT 분석에 실패했습니다.")
+                    # 이미지별 데이터 분석 결과 출력
+                    if objective_result:
+                        st.success("✅ 이미지별 객관 분석 성공!")
+                        st.json(objective_result)  # Step 1 결과만 표시
+                        batch_objectives.append(objective_result)
+                        success_count += 1
+                    elif extracted_text: # 데이터 분석 실패했지만 OCR은 성공한 경우
+                        st.error("이미지별 데이터 분석에 실패했습니다.")
                     elif s3_file_url: # OCR부터 실패한 경우
                         st.error("텍스트 추출에 실패했습니다.")
+
+                    # 전역 진행률 업데이트 (이 이미지 처리 완료)
+                    processed_count += 1
+                    percent = int(processed_count / total_images * 100)
+                    progress_bar.progress(percent)
+                    status_text.text(
+                        f"GPT 분석 완료: {success_count}/{total_images} · 처리됨: {processed_count}/{total_images}"
+                    )
 
                     st.session_state["history"].append(
                         {
                             "filename": uploaded_file.name,
                             "s3_url": s3_file_url,
                             "extracted_text": extracted_text,
-                            "analysis_result": analysis_result,
+                            "objective_result": objective_result,
                         }
                     )
+
+        # 배치 단위 통합 사용자 프로필
+        if batch_objectives:
+            st.markdown("---")
+            st.subheader("👤 통합 사용자 프로필 (이번 세션 기준)")
+            with st.spinner("여러 이미지 결과를 통합하여 프로필 생성 중..."):
+                aggregated_profile = aggregate_user_profile(batch_objectives)
+            if aggregated_profile:
+                st.success("✅ 통합 프로필 생성 완료")
+                st.json(aggregated_profile)
+            else:
+                st.error("통합 프로필 생성에 실패했습니다.")
 
