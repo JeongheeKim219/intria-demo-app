@@ -12,9 +12,11 @@ if not history:
 else:
     for record in history:
         with st.expander(record["filename"], expanded=False):
-            if record.get("analysis_result"):
+            # Read new key with fallback to legacy key for compatibility
+            analysis = record.get("objective_result") or record.get("analysis_result")
+            if analysis:
                 st.subheader("GPT 분석 결과")
-                st.json(record["analysis_result"])
+                st.json(analysis)
             if record.get("extracted_text"):
                 st.subheader("OCR 텍스트")
                 st.text_area(
