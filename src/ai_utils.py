@@ -5,55 +5,87 @@ import ast  # 방어적 파싱을 위한 라이브러리
 
 
 
-# Function tool schema: objective extraction with ranked items
+# Function tool schema:  중요도 반영, 중요도는 순위가 아니라 등급으로 반영.
 objective_tool_schema = {
     "type": "function",
     "function": {
         "name": "extract_objective_analysis",
-        "description": "Extract only objective data (Step 1) from OCR text of a mobile screenshot.",
+        "description": "모바일 스크린샷의 OCR 텍스트에서 객관적인 정보를 추출합니다. 추출결과는 반드시 입력 텍스트와 동일한 언어로 작성되어야 한다.",
         "parameters": {
             "type": "object",
             "properties": {
                 "data_analysis_results": {
                     "type": "object",
-                    "description": "Step 1: Objective information extracted by the Data Analyst.",
+                            "description": "핵심 키워드 목록 (고유명사 제외). 반드시 입력 텍스트와 동일한 언어로 작성되어야 한다.",
                     "properties": {
-                        "content_type": { "type": "string", "description": "스크린샷 콘텐츠의 유형 (예: 소셜 미디어, 쇼핑, 영수증 등)" },
+                        "content_type": {
+                            "type": "string",
+                            "description": "스크린샷의 콘텐츠 유형 (예: 소셜 미디어, 쇼핑, 영수증, 티켓, 시간표 등)."
+                        },
                         "main_topics": {
-                            "type": "array", "description": "핵심 주제 후보. 각 항목에 중요도 '등급'을 부여해야 함.", "maxItems": 3,
+                            "type": "array",
+                            "description": "핵심 주제 목록. 각 주제는 반드시 중요도 등급을 포함해야 합니다.",
+                            "maxItems": 3,
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "item": {"type": "string", "description": "핵심 주제"},
-                                    "importance": {"type": "integer", "description": "중요도 등급 (1=매우 중요, 5=관련성 낮음). 순위가 아니므로 여러 항목이 같은 등급을 가질 수 있음."}
-                                }, "required": ["item", "importance"],
-                            },
+                                    "item": {
+                                        "type": "string",
+                                        "description": "핵심 주제 (입력 텍스트와 동일한 언어로 작성)."
+                                    },
+                                    "importance": {
+                                        "type": "integer",
+                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 동일한 등급을 여러 항목에 부여할 수 있음."
+                                    }
+                                },
+                                "required": ["item", "importance"]
+                            }
                         },
                         "entities": {
-                            "type": "array", "description": "주요 개체명 후보. 각 항목에 중요도 '등급'을 부여해야 함.", "maxItems": 8,
+                            "type": "array",
+                            "description": "주요 개체명 목록 (장소, 브랜드, 인물 등). 각 개체는 반드시 중요도 등급을 포함해야 합니다. 반드시 입력 텍스트와 동일한 언어로 작성되어야 한다.",
+                            "maxItems": 5,
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "item": {"type": "string", "description": "개체명"},
-                                    "importance": {"type": "integer", "description": "중요도 등급 (1=매우 중요, 5=관련성 낮음). 순위가 아니므로 여러 항목이 같은 등급을 가질 수 있음."}
-                                }, "required": ["item", "importance"],
-                            },
+                                    "item": {
+                                        "type": "string",
+                                        "description": "개체명. 반드시 입력 텍스트와 동일한 언어로 작성."
+                                    },
+                                    "importance": {
+                                        "type": "integer",
+                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 동일한 등급을 여러 항목에 부여할 수 있음."
+                                    }
+                                },
+                                "required": ["item", "importance"]
+                            }
                         },
                         "keywords": {
-                            "type": "array", "description": "핵심 키워드 후보. 각 항목에 중요도 '등급'을 부여해야 함.", "maxItems": 8,
+                            "type": "array",
+                            "description": "핵심 키워드 목록 (고유명사 제외). 키워드는 입력 텍스트와 동일한 언어로 작성되어야 하며 각 키워드는 반드시 중요도 등급을 포함해야 합니다.",
+                            "maxItems": 5,
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "item": {"type": "string", "description": "키워드"},
-                                    "importance": {"type": "integer", "description": "중요도 등급 (1=매우 중요, 5=관련성 낮음). 순위가 아니므로 여러 항목이 같은 등급을 가질 수 있음."}
-                                }, "required": ["item", "importance"],
-                            },
-                        },
-                    }, "required": ["content_type", "main_topics", "entities", "keywords"],
+                                    "item": {
+                                        "type": "string",
+                                        "description": "키워드. 반드시 입력 텍스트와 동일한 언어로 작성."
+                                    },
+                                    "importance": {
+                                        "type": "integer",
+                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 동일한 등급을 여러 항목에 부여할 수 있음."
+                                    }
+                                },
+                                "required": ["item", "importance"]
+                            }
+                        }
+                    },
+                    "required": ["content_type", "main_topics", "entities", "keywords"]
                 }
-            }, "required": ["data_analysis_results"],
-        },
-    },
+            },
+            "required": ["data_analysis_results"]
+        }
+    }
 }
 
 
@@ -118,16 +150,16 @@ def analyze_text_objective(text):
             {
                 "role": "system",
                 "content": (
-                    "You are a meticulous Data Analyst for mobile OCR text. "
-                    "Your task is to extract objective information using the 'extract_objective_analysis' tool. "
-                    "You MUST assign an **importance level (1=very high, 5=very low)** to each item. "
-                    "**Multiple items can share the same importance level.**"
-                    "The output language must match the input text's language."
+                    "당신은 모바일 OCR 텍스트를 분석하는 유능한 데이터 분석가입니다. "
+                    "주어진 함수(tool)를 사용하여 객관적인 정보를 추출해야 합니다. "
+                    "각 항목에는 반드시 **중요도 등급(1=매우 중요, 5=관련성 낮음)**을 부여해야 하며, "
+                    "**여러 항목이 동일한 등급을 가질 수 있습니다.** "
+                    "모든 출력값은 반드시 입력된 OCR 텍스트의 언어와 일치해야 합니다."
                 ),
             },
             {
                 "role": "user",
-                "content": f"""Extract only Step 1 objective analysis from the following OCR text and return using 'extract_objective_analysis'.
+                "content": f"""다음 OCR 텍스트에서 객관적인 정보를 추출하고, 'extract_objective_analysis' 함수를 사용해서 반환해주세요.
                 --- OCR TEXT START---
                 {text}
                 --- OCR TEXT END ---""",
@@ -174,23 +206,34 @@ aggregate_tool_schema = {
     "type": "function",
     "function": {
         "name": "generate_aggregated_profile",
-        "description": "Generates a single creative profiling result by aggregating multiple objective analyses.",
+        "description": "여러 데이터들을 종합하여, 이 데이터를 업로드한 사용자에 대한 프로파일링 결과를 생성합니다.",
         "parameters": {
             "type": "object",
             "properties": {
                 "creative_profiling_results": {
                     "type": "object",
                     "properties": {
-                        "inferred_user_interests": {"type": "array", "items": {"type": "string"}},
-                        "new_tag_suggestions": {"type": "array", "items": {"type": "string"}},
-                        "profiler_summary": {"type": "string"},
+                        "inferred_user_interests": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "데이터를 종합하여 추론한 사용자의 잠재적 관심사 목록. 반드시 입력 데이터의 언어로 작성해야 합니다."
+                        },
+                        "new_tag_suggestions": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "사용자에게 새롭게 제안할 수 있는 창의적 태그 목록. 반드시 입력 데이터의 언어로 작성하며, 해시태그 형태 권장."
+                        },
+                        "profiler_summary": {
+                            "type": "string",
+                            "description": "사용자의 관심사와 취향에 대한 간단한 요약. 반드시 입력 데이터의 언어로 작성해야 합니다."
+                        }
                     },
-                    "required": ["inferred_user_interests", "new_tag_suggestions", "profiler_summary"],
+                    "required": ["inferred_user_interests", "new_tag_suggestions", "profiler_summary"]
                 }
             },
-            "required": ["creative_profiling_results"],
-        },
-    },
+            "required": ["creative_profiling_results"]
+        }
+    }
 }
 
 
@@ -201,23 +244,26 @@ def aggregate_user_profile(objective_data_points):
     try:
         client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
+
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are a Creative Profiler. Given multiple objective analyses, aggregate them to infer a user interest profile. "
-                    "Use only the provided objective data and consider the cultural context relevant to the language of the input data. "
-                    "**Crucially, the output language of all string values MUST match the predominant language of the input data points.**"
-                ),
+                    "당신은 핸드폰 스크린샷에서 추출된 객관적 데이터를 종합하여, "
+                    "사용자의 숨겨진 의도와 관심사를 추론하는 창의적인 프로파일러입니다. "
+                    "주어진 데이터의 핵심 패턴과 문화적 맥락을 깊이 있게 분석하고, "
+                    "모든 출력값(항목명, 요약문, 키워드, 태그 등 모든 텍스트)은 반드시 입력된 OCR 텍스트와 동일한 언어로 작성해야 하며, 영어 단어나 번역을 포함하지 마세요."
+                )
             },
             {
                 "role": "user",
                 "content": (
-                    "Aggregate the following objective analyses into one creative profile. "
-                    "Prefer recurring topics/entities and avoid overfitting to one-off noise.\n\n"
+                    "다음 분석 결과들을 종합하여 하나의 창의적인 프로필을 생성해주세요. "
+                    "반복되는 주제나 개체를 선호하고, 일회성 노이즈는 무시하세요. "
+                    "출력은 반드시 입력 OCR 텍스트와 동일한 언어로 작성해야 합니다. 한국어 OCR이면 한국어로만, 영어 OCR이면 영어로만 작성하세요. 두 언어를 섞지 마세요."
                     + json.dumps({"objective_data_points": objective_data_points}, ensure_ascii=False)
-                ),
-            },
+                )
+            }
         ]
 
         response = client.chat.completions.create(
