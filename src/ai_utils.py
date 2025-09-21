@@ -35,7 +35,7 @@ objective_tool_schema = {
                                     },
                                     "importance": {
                                         "type": "integer",
-                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 동일한 등급을 여러 항목에 부여할 수 있음."
+                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 순위가 아니므로 동일 등급 부여 및 특정 등급 건너뛰기 가능."
                                     }
                                 },
                                 "required": ["item", "importance"]
@@ -54,7 +54,7 @@ objective_tool_schema = {
                                     },
                                     "importance": {
                                         "type": "integer",
-                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 동일한 등급을 여러 항목에 부여할 수 있음."
+                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 순위가 아니므로 동일 등급 부여 및 특정 등급 건너뛰기 가능."
                                     }
                                 },
                                 "required": ["item", "importance"]
@@ -73,7 +73,7 @@ objective_tool_schema = {
                                     },
                                     "importance": {
                                         "type": "integer",
-                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 동일한 등급을 여러 항목에 부여할 수 있음."
+                                        "description": "중요도 (1=매우 중요, 5=관련성 낮음). 순위가 아니므로 동일 등급 부여 및 특정 등급 건너뛰기 가능."
                                     }
                                 },
                                 "required": ["item", "importance"]
