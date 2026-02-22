@@ -1,3 +1,5 @@
 .DS_Store
 .venv/
 .streamlit/secrets.toml
+__pycache__/
+.vscode/settings.json

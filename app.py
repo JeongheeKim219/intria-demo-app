@@ -1,14 +1,17 @@
 import streamlit as st
 from PIL import Image
-# src 폴더에 있는 우리만의 유틸리티 함수들을 임포트합니다.
 from src.aws_utils import upload_file_to_s3
-from src.processing import analyze_image_with_ai # (가상) AI 분석 함수
-from src.ui_components import display_analysis_results # (가상) UI 출력 함수
+from src.ocr_utils import extract_text_with_clova_ocr
+from src.ai_utils import analyze_text_objective, aggregate_user_profile
+
+if "history" not in st.session_state:
+    st.session_state["history"] = []
+
 
 # --- 1. 페이지 기본 설정 ---
 st.set_page_config(
     page_title="AI 스크린샷 정보 추출기",
-    page_icon="🤖",
+    page_icon="🧐",
     layout="wide"
 )
 
@@ -25,52 +28,95 @@ with st.sidebar:
     )
 
 # --- 3. 메인 화면 UI ---
-st.title("🤖 AI 스크린샷 정보 추출기")
+st.title("AI 스크린샷 정보 추출기")
 st.markdown("---")
 
 # 파일 업로더 위젯
-uploaded_file = st.file_uploader(
+uploaded_files = st.file_uploader(
     "분석할 스크린샷 이미지를 업로드하세요.",
-    type=['png', 'jpg', 'jpeg']
+    type=['png', 'jpg', 'jpeg'],
+    accept_multiple_files=True
 )
 
-# 파일이 업로드되었을 때만 아래 로직 실행
-if uploaded_file is not None:
-    col1, col2 = st.columns(2)
 
-    with col1:
-        st.subheader("🖼️ 원본 이미지")
-        st.image(uploaded_file, caption="업로드된 이미지", use_column_width=True)
+if uploaded_files:
+    st.subheader("🔍 분석 실행")
+    if st.button(f"{len(uploaded_files)}개 파일 분석 시작하기"):
+        batch_objectives = []
+        # 전역 진행 상황 표시 (많은 이미지 처리 시 유용)
+        total_images = len(uploaded_files)
+        processed_count = 0
+        success_count = 0
+        progress_container = st.container()
+        status_text = progress_container.empty()
+        progress_bar = progress_container.progress(0)
 
-    with col2:
-        st.subheader("🔍 분석 실행")
-        if st.button("S3에 업로드하고 분석 시작하기"):
-            s3_file_url = None # S3 URL 초기화
-            analysis_result = None # 분석 결과 초기화
+        for uploaded_file in uploaded_files:
+            with st.expander(f"'{uploaded_file.name}' 분석 결과", expanded=False):
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.image(uploaded_file, caption="업로드된 이미지", use_container_width=True)
+                
+                with col2:
+                    s3_file_url = None
+                    extracted_text = None
+                    objective_result = None
 
-            # 1단계: S3에 파일 업로드
-            with st.spinner("파일을 S3에 업로드하는 중..."):
-                # 실제 로직은 src/aws_utils.py에 있는 함수를 호출합니다.
-                s3_file_url = upload_file_to_s3(uploaded_file)
+                    with st.spinner("파일을 S3에 업로드하는 중..."):
+                        s3_file_url = upload_file_to_s3(uploaded_file)
 
-            # 2단계: S3 업로드 성공 시 AI 분석 실행
-            if s3_file_url:
-                st.info(f"S3 업로드 완료: {s3_file_url}")
-                with st.spinner("AI가 이미지를 분석하고 있습니다... (OCR, LLM)"):
-                    # 실제 AI 처리 로직은 src/processing.py에 있는 함수를 호출합니다.
-                    # 이 함수는 S3 URL을 받아 Lambda를 트리거하거나 직접 처리할 수 있습니다.
-                    analysis_result = analyze_image_with_ai(s3_file_url)
+                    # S3 업로드 성공 시 OCR 분석 실행
+                    if s3_file_url:
+                        st.info(f"S3 업로드 완료. OCR 분석을 시작합니다.")
+                        with st.spinner("이미지에서 텍스트를 읽고 있습니다..."):
+                            st.write(s3_file_url)
+                            extracted_text = extract_text_with_clova_ocr(s3_file_url)
 
-            # 3단계: 분석 결과 출력
-            if analysis_result:
-                st.success("✅ 분석이 완료되었습니다!")
-                # 실제 결과 출력 UI는 src/ui_components.py에 있는 함수를 호출합니다.
-                display_analysis_results(analysis_result)
+                    # OCR 결과 출력
+                    if extracted_text:
+                        st.subheader("📄 OCR 추출 결과")
+                        st.text_area("OCR Text", extracted_text, height=200, key=f"text_for_{uploaded_file.name}")
+                        with st.spinner("이미지별 분석을 수행 중..."):
+                            objective_result = analyze_text_objective(extracted_text)
+                            
+                    # 이미지별 데이터 분석 결과 출력
+                    if objective_result:
+                        st.success("✅ 이미지별 객관 분석 성공!")
+                        st.json(objective_result)  # Step 1 결과만 표시
+                        batch_objectives.append(objective_result)
+                        success_count += 1
+                    elif extracted_text: # 데이터 분석 실패했지만 OCR은 성공한 경우
+                        st.error("이미지별 데이터 분석에 실패했습니다.")
+                    elif s3_file_url: # OCR부터 실패한 경우
+                        st.error("텍스트 추출에 실패했습니다.")
+
+                    # 전역 진행률 업데이트 (이 이미지 처리 완료)
+                    processed_count += 1
+                    percent = int(processed_count / total_images * 100)
+                    progress_bar.progress(percent)
+                    status_text.text(
+                        f"GPT 분석 완료: {success_count}/{total_images} · 처리됨: {processed_count}/{total_images}"
+                    )
+
+                    st.session_state["history"].append(
+                        {
+                            "filename": uploaded_file.name,
+                            "s3_url": s3_file_url,
+                            "extracted_text": extracted_text,
+                            "objective_result": objective_result,
+                        }
+                    )
+
+        # 배치 단위 통합 사용자 프로필
+        if batch_objectives:
+            st.markdown("---")
+            st.subheader("👤 통합 사용자 프로필 (이번 세션 기준)")
+            with st.spinner("여러 이미지 결과를 통합하여 프로필 생성 중..."):
+                aggregated_profile = aggregate_user_profile(batch_objectives)
+            if aggregated_profile:
+                st.success("✅ 통합 프로필 생성 완료")
+                st.json(aggregated_profile)
             else:
-                st.error("분석 과정에서 오류가 발생했습니다.")
-else:
-    st.warning("이미지를 업로드하여 분석을 시작하세요.")
+                st.error("통합 프로필 생성에 실패했습니다.")
 
-```
-
-이 `app.py` 코드는 이제 프로젝트의 전체 흐름을 명확하게 보여주는 '지휘자' 역할을 합니다. 실제 파일 처리, AI 분석, 결과 출력과 같은 복잡한 작업들은 각각의 전문화된 `src` 폴더 안의 파일들에게 위임하여 코드의 가독성과 유지보수성을 크게 높였습
