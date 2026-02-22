@@ -1,49 +1,70 @@
+import html
+import json
+import time
+
 import streamlit as st
 from PIL import Image
+
+from src.embeddings import VectorStore
+from src.ai_utils import (
+    aggregate_user_profile_before_after,
+    analyze_text_objective,
+    index_objective_result,
+)
 from src.aws_utils import upload_file_to_s3
 from src.ocr_utils import extract_text_with_clova_ocr
-from src.ai_utils import analyze_text_objective, aggregate_user_profile
+
 
 if "history" not in st.session_state:
     st.session_state["history"] = []
 
 
+def get_vector_store():
+    """Lazily initialize and cache the VectorStore, remembering failures."""
+    error = st.session_state.get("vector_store_error")
+    if error:
+        raise RuntimeError(error)
+
+    if "vector_store" not in st.session_state:
+        try:
+            st.session_state["vector_store"] = VectorStore()
+        except Exception as exc:  # pragma: no cover - surface configuration issues to UI
+            st.session_state["vector_store_error"] = str(exc)
+            raise
+    return st.session_state["vector_store"]
+
+
 # --- 1. 페이지 기본 설정 ---
 st.set_page_config(
-    page_title="AI 스크린샷 정보 추출기",
+    page_title="AI 스크린샷 정보 추출",
     page_icon="🧐",
-    layout="wide"
+    layout="wide",
 )
 
 # --- 2. 사이드바 UI ---
 with st.sidebar:
-    st.header("📜 사용 안내")
+    st.header("사용 안내")
     st.info(
-        "이 앱은 스크린샷에서 유용한 정보를 추출하고 요약합니다. "
-        "분석하고 싶은 이미지를 업로드하고 '분석 시작' 버튼을 눌러주세요."
+        "여러 장의 스크린샷에서 정보를 추출하고 요약합니다. "
+        "분석 단계와 최종 집계 프로필을 생성합니다."
     )
-    st.warning(
-        "이 프로젝트는 AI 대학원 포트폴리오 제출을 위해 제작되었습니다. "
-        "실제 서비스가 아니므로 데모용으로만 사용해주세요."
-    )
+    st.warning("실제 서비스가 아니므로 데모용으로만 사용해주시기 바랍니다.")
 
 # --- 3. 메인 화면 UI ---
-st.title("AI 스크린샷 정보 추출기")
+st.title("AI 스크린샷 정보 추출")
 st.markdown("---")
 
 # 파일 업로더 위젯
 uploaded_files = st.file_uploader(
     "분석할 스크린샷 이미지를 업로드하세요.",
-    type=['png', 'jpg', 'jpeg'],
-    accept_multiple_files=True
+    type=["png", "jpg", "jpeg"],
+    accept_multiple_files=True,
 )
 
-
 if uploaded_files:
-    st.subheader("🔍 분석 실행")
+    st.subheader("배치 분석 진행")
     if st.button(f"{len(uploaded_files)}개 파일 분석 시작하기"):
         batch_objectives = []
-        # 전역 진행 상황 표시 (많은 이미지 처리 시 유용)
         total_images = len(uploaded_files)
         processed_count = 0
         success_count = 0
@@ -53,52 +74,123 @@ if uploaded_files:
 
         for uploaded_file in uploaded_files:
             with st.expander(f"'{uploaded_file.name}' 분석 결과", expanded=False):
-                
                 col1, col2 = st.columns(2)
                 with col1:
                     st.image(uploaded_file, caption="업로드된 이미지", use_container_width=True)
-                
+
                 with col2:
                     s3_file_url = None
                     extracted_text = None
                     objective_result = None
 
-                    with st.spinner("파일을 S3에 업로드하는 중..."):
+                    with st.spinner("파일을 S3에 업로드 중..."):
                         s3_file_url = upload_file_to_s3(uploaded_file)
 
-                    # S3 업로드 성공 시 OCR 분석 실행
+                    # S3 업로드 성공 후 OCR 분석 수행
                     if s3_file_url:
-                        st.info(f"S3 업로드 완료. OCR 분석을 시작합니다.")
-                        with st.spinner("이미지에서 텍스트를 읽고 있습니다..."):
+                        st.info("S3 업로드 완료. OCR 분석을 시작합니다.")
+                        with st.spinner("이미지에서 텍스트 추출 중..."):
                             st.write(s3_file_url)
                             extracted_text = extract_text_with_clova_ocr(s3_file_url)
 
-                    # OCR 결과 출력
-                    if extracted_text:
-                        st.subheader("📄 OCR 추출 결과")
-                        st.text_area("OCR Text", extracted_text, height=200, key=f"text_for_{uploaded_file.name}")
-                        with st.spinner("이미지별 분석을 수행 중..."):
+                    # 업로드/추출 결과에 따른 처리
+                    if not s3_file_url:
+                        st.error("S3 업로드 실패로 분석을 진행하지 못했습니다.")
+                    elif extracted_text and str(extracted_text).strip():
+                        st.subheader("OCR 추출 결과")
+                        st.text_area(
+                            "OCR Text",
+                            extracted_text,
+                            height=200,
+                            key=f"text_for_{uploaded_file.name}",
+                        )
+                        with st.spinner("객관적 데이터 분석 진행 중..."):
                             objective_result = analyze_text_objective(extracted_text)
-                            
-                    # 이미지별 데이터 분석 결과 출력
-                    if objective_result:
-                        st.success("✅ 이미지별 객관 분석 성공!")
-                        st.json(objective_result)  # Step 1 결과만 표시
-                        batch_objectives.append(objective_result)
-                        success_count += 1
-                    elif extracted_text: # 데이터 분석 실패했지만 OCR은 성공한 경우
-                        st.error("이미지별 데이터 분석에 실패했습니다.")
-                    elif s3_file_url: # OCR부터 실패한 경우
-                        st.error("텍스트 추출에 실패했습니다.")
+                    else:
+                        # 텍스트 추출 실패 시: 이미지 전용으로 분류
+                        st.info("텍스트를 추출하지 못해 이미지 전용으로 분류합니다.")
+                        objective_result = {
+                            "content_type": "image_only",
+                            "main_topics": [],
+                            "entities": [],
+                            "keywords": [],
+                        }
+                        st.json(objective_result)
 
-                    # 전역 진행률 업데이트 (이 이미지 처리 완료)
+                    # 결과 출력 및 배치 집계 포함 여부 결정
+                    if objective_result:
+                        if isinstance(objective_result, dict) and objective_result.get("content_type") == "image_only":
+                            # 이미지 전용은 배치 집계 제외
+                            pass
+                        else:
+                            st.success("🎉 객관적 데이터 분석 성공!")
+                            st.json(objective_result)
+
+                            # 분석 결과 벡터 인덱싱
+                            doc_id = s3_file_url or f"{uploaded_file.name}_{int(time.time())}"
+                            try:
+                                vector_store = get_vector_store()
+                            except Exception as vs_err:
+                                st.warning(f"벡터 스토어 초기화 실패로 인덱싱을 건너뜁니다: {vs_err}")
+                            else:
+                                index_payload = dict(objective_result)
+                                if s3_file_url:
+                                    index_payload["image_url"] = s3_file_url
+                                if index_objective_result(
+                                    index_payload,
+                                    doc_id,
+                                    vs=vector_store,
+                                ):
+                                    st.caption("🔍 벡터 인덱싱 완료")
+
+                            # 중요도 적용 전/후 비교
+                            if all(k in objective_result for k in [
+                                "main_topics_raw", "entities_raw", "keywords_raw"
+                            ]):
+                                with st.expander("중요도 적용 전/후 비교", expanded=False):
+                                    tabs = st.tabs(["주제", "개체", "키워드"])
+
+                                    with tabs[0]:
+                                        col_a, col_b = st.columns(2)
+                                        with col_a:
+                                            st.caption("적용 전 (Raw)")
+                                            st.json(objective_result.get("main_topics_raw", []))
+                                        with col_b:
+                                            st.caption("적용 후 (Top-N)")
+                                            st.json(objective_result.get("main_topics", []))
+
+                                    with tabs[1]:
+                                        col_a, col_b = st.columns(2)
+                                        with col_a:
+                                            st.caption("적용 전 (Raw)")
+                                            st.json(objective_result.get("entities_raw", []))
+                                        with col_b:
+                                            st.caption("적용 후 (Top-N)")
+                                            st.json(objective_result.get("entities", []))
+
+                                    with tabs[2]:
+                                        col_a, col_b = st.columns(2)
+                                        with col_a:
+                                            st.caption("적용 전 (Raw)")
+                                            st.json(objective_result.get("keywords_raw", []))
+                                        with col_b:
+                                            st.caption("적용 후 (Top-N)")
+                                            st.json(objective_result.get("keywords", []))
+
+                            batch_objectives.append(objective_result)
+                            success_count += 1
+                    elif extracted_text:
+                        st.error("이미지의 객관적 데이터 분석이 실패하였습니다.")
+
+                    # 진행 상태 업데이트
                     processed_count += 1
                     percent = int(processed_count / total_images * 100)
                     progress_bar.progress(percent)
                     status_text.text(
-                        f"GPT 분석 완료: {success_count}/{total_images} · 처리됨: {processed_count}/{total_images}"
+                        f"GPT 분석 완료: {success_count}/{total_images} · 처리: {processed_count}/{total_images}"
                     )
 
+                    # 히스토리 기록
                     st.session_state["history"].append(
                         {
                             "filename": uploaded_file.name,
@@ -108,15 +200,149 @@ if uploaded_files:
                         }
                     )
 
-        # 배치 단위 통합 사용자 프로필
+        # 배치 단위 집계 프로필 생성
         if batch_objectives:
             st.markdown("---")
-            st.subheader("👤 통합 사용자 프로필 (이번 세션 기준)")
-            with st.spinner("여러 이미지 결과를 통합하여 프로필 생성 중..."):
-                aggregated_profile = aggregate_user_profile(batch_objectives)
-            if aggregated_profile:
-                st.success("✅ 통합 프로필 생성 완료")
-                st.json(aggregated_profile)
+            st.subheader("이번 배치 집계 프로필 (세션 기준)")
+            with st.spinner("여러 이미지 결과를 합쳐 프로파일 생성 중..."):
+                before_profile, after_profile = aggregate_user_profile_before_after(batch_objectives)
+            if before_profile or after_profile:
+                st.success("✅ 집계 프로필 생성 완료")
+                with st.expander("프로파일링 중요도 적용 전/후 비교", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.subheader("적용 전 (Raw 기반)")
+                        st.json(before_profile or {})
+                    with col2:
+                        st.subheader("적용 후 (Top-N 기반)")
+                        st.json(after_profile or {})
             else:
-                st.error("통합 프로필 생성에 실패했습니다.")
+                st.error("집계 프로필 생성에 실패했습니다.")
 
+# --- 4. 벡터 검색 UI ---
+st.markdown("---")
+st.subheader("벡터 검색 (실험 기능)")
+if "vector_result_css" not in st.session_state:
+    st.markdown(
+        """
+        <style>
+        details.vector-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 0.4rem 0.6rem;
+            margin-bottom: 1rem;
+            background: #fafafa;
+        }
+        details.vector-card summary {
+            cursor: pointer;
+            list-style: none;
+        }
+        details.vector-card summary::-webkit-details-marker {
+            display: none;
+        }
+        .vector-card__header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .vector-card__image {
+            max-width: 180px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        .vector-card__meta {
+            font-size: 0.9rem;
+            color: #333;
+        }
+        .vector-card__body {
+            margin-top: 0.75rem;
+            border-top: 1px solid #e5e5e5;
+            padding-top: 0.5rem;
+        }
+        .vector-card__body pre {
+            white-space: pre-wrap;
+            background: #fff;
+            border-radius: 4px;
+            padding: 0.5rem;
+            border: 1px solid #eaeaea;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.session_state["vector_result_css"] = True
+search_col, option_col = st.columns([3, 1])
+with search_col:
+    vector_query = st.text_input("의미 기반으로 검색할 문장 또는 질문을 입력하세요.", key="vector_search_query")
+with option_col:
+    top_k = int(
+        st.number_input(
+            "결과 개수",
+            min_value=1,
+            max_value=20,
+            value=5,
+            step=1,
+            key="vector_search_top_k",
+        )
+    )
+
+if st.button("검색 실행", key="vector_search_button"):
+    if not vector_query.strip():
+        st.warning("검색어를 입력하세요.")
+    else:
+        try:
+            vector_store = get_vector_store()
+        except Exception as vs_err:
+            st.error(f"벡터 스토어를 초기화할 수 없습니다: {vs_err}")
+        else:
+            with st.spinner("벡터 검색 중..."):
+                results = vector_store.search(vector_query, k=top_k)
+
+            if not results:
+                st.info("검색 결과가 없습니다. 먼저 이미지를 분석·인덱싱했는지 확인해주세요.")
+            else:
+                st.success(f"{len(results)}개 결과를 찾았습니다.")
+                for idx, item in enumerate(results, start=1):
+                    metadata = item.get("metadata", {})
+                    score = item.get("score")
+                    score_str = f"{score:.3f}" if isinstance(score, (int, float)) else "-"
+                    doc_id = metadata.get("id") or item.get("id") or "알 수 없음"
+                    content_type = metadata.get("content_type", "미지정")
+                    source_payload = metadata.get("source", {})
+                    image_url = source_payload.get("image_url")
+
+                    header_meta = (
+                        f"{idx}. 유형: {content_type} · 점수: {score_str} · 문서: {doc_id}"
+                    )
+                    summary_text = item.get("text", "")
+                    summary_text = html.escape(summary_text)
+                    source_json = html.escape(json.dumps(source_payload, ensure_ascii=False, indent=2))
+                    image_markup = ""
+                    if image_url:
+                        tooltip = html.escape(f"{doc_id} (score {score_str})")
+                        image_markup = f'<img src="{image_url}" alt="{tooltip}" class="vector-card__image" title="자세한 정보를 보려면 클릭하세요" />'
+                    else:
+                        image_markup = (
+                            '<div class="vector-card__image" style="display:flex;align-items:center;'
+                            'justify-content:center;background:#f2f2f2;">이미지 없음</div>'
+                        )
+
+                    st.markdown(
+                        f"""
+                        <details class="vector-card">
+                          <summary>
+                            <div class="vector-card__header" title="클릭하거나 마우스를 올려 자세히 보기">
+                              {image_markup}
+                              <div class="vector-card__meta">{html.escape(header_meta)}</div>
+                            </div>
+                          </summary>
+                          <div class="vector-card__body">
+                            <strong>요약 텍스트</strong>
+                            <pre>{summary_text}</pre>
+                            <strong>원본 분석 결과</strong>
+                            <pre>{source_json}</pre>
+                          </div>
+                        </details>
+                        """,
+                        unsafe_allow_html=True,
+                    )
