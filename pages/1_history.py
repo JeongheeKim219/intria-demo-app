@@ -12,9 +12,9 @@ if not history:
 else:
     for i, record in enumerate(history):
         with st.expander(record["filename"], expanded=False):
-            if record.get("analysis_result"):
+            if record.get("objective_result"):
                 st.subheader("GPT 분석 결과")
-                st.json(record["analysis_result"])
+                st.json(record["objective_result"])
             if record.get("extracted_text"):
                 st.subheader("OCR 텍스트")
                 st.text_area(
