@@ -1,11 +1,37 @@
+import html
+import json
+import time
+
 import streamlit as st
 from PIL import Image
+
+from src.embeddings import VectorStore
+from src.ai_utils import (
+    aggregate_user_profile_before_after,
+    analyze_text_objective,
+    index_objective_result,
+)
 from src.aws_utils import upload_file_to_s3
 from src.ocr_utils import extract_text_with_clova_ocr
-from src.ai_utils import analyze_text_objective, aggregate_user_profile_before_after
+
 
 if "history" not in st.session_state:
     st.session_state["history"] = []
+
+
+def get_vector_store():
+    """Lazily initialize and cache the VectorStore, remembering failures."""
+    error = st.session_state.get("vector_store_error")
+    if error:
+        raise RuntimeError(error)
+
+    if "vector_store" not in st.session_state:
+        try:
+            st.session_state["vector_store"] = VectorStore()
+        except Exception as exc:  # pragma: no cover - surface configuration issues to UI
+            st.session_state["vector_store_error"] = str(exc)
+            raise
+    return st.session_state["vector_store"]
 
 
 # --- 1. 페이지 기본 설정 ---
@@ -100,6 +126,23 @@ if uploaded_files:
                             st.success("🎉 객관적 데이터 분석 성공!")
                             st.json(objective_result)
 
+                            # 분석 결과 벡터 인덱싱
+                            doc_id = s3_file_url or f"{uploaded_file.name}_{int(time.time())}"
+                            try:
+                                vector_store = get_vector_store()
+                            except Exception as vs_err:
+                                st.warning(f"벡터 스토어 초기화 실패로 인덱싱을 건너뜁니다: {vs_err}")
+                            else:
+                                index_payload = dict(objective_result)
+                                if s3_file_url:
+                                    index_payload["image_url"] = s3_file_url
+                                if index_objective_result(
+                                    index_payload,
+                                    doc_id,
+                                    vs=vector_store,
+                                ):
+                                    st.caption("🔍 벡터 인덱싱 완료")
+
                             # 중요도 적용 전/후 비교
                             if all(k in objective_result for k in [
                                 "main_topics_raw", "entities_raw", "keywords_raw"
@@ -175,3 +218,131 @@ if uploaded_files:
                         st.json(after_profile or {})
             else:
                 st.error("집계 프로필 생성에 실패했습니다.")
+
+# --- 4. 벡터 검색 UI ---
+st.markdown("---")
+st.subheader("벡터 검색 (실험 기능)")
+if "vector_result_css" not in st.session_state:
+    st.markdown(
+        """
+        <style>
+        details.vector-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 0.4rem 0.6rem;
+            margin-bottom: 1rem;
+            background: #fafafa;
+        }
+        details.vector-card summary {
+            cursor: pointer;
+            list-style: none;
+        }
+        details.vector-card summary::-webkit-details-marker {
+            display: none;
+        }
+        .vector-card__header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .vector-card__image {
+            max-width: 180px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        .vector-card__meta {
+            font-size: 0.9rem;
+            color: #333;
+        }
+        .vector-card__body {
+            margin-top: 0.75rem;
+            border-top: 1px solid #e5e5e5;
+            padding-top: 0.5rem;
+        }
+        .vector-card__body pre {
+            white-space: pre-wrap;
+            background: #fff;
+            border-radius: 4px;
+            padding: 0.5rem;
+            border: 1px solid #eaeaea;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.session_state["vector_result_css"] = True
+search_col, option_col = st.columns([3, 1])
+with search_col:
+    vector_query = st.text_input("의미 기반으로 검색할 문장 또는 질문을 입력하세요.", key="vector_search_query")
+with option_col:
+    top_k = int(
+        st.number_input(
+            "결과 개수",
+            min_value=1,
+            max_value=20,
+            value=5,
+            step=1,
+            key="vector_search_top_k",
+        )
+    )
+
+if st.button("검색 실행", key="vector_search_button"):
+    if not vector_query.strip():
+        st.warning("검색어를 입력하세요.")
+    else:
+        try:
+            vector_store = get_vector_store()
+        except Exception as vs_err:
+            st.error(f"벡터 스토어를 초기화할 수 없습니다: {vs_err}")
+        else:
+            with st.spinner("벡터 검색 중..."):
+                results = vector_store.search(vector_query, k=top_k)
+
+            if not results:
+                st.info("검색 결과가 없습니다. 먼저 이미지를 분석·인덱싱했는지 확인해주세요.")
+            else:
+                st.success(f"{len(results)}개 결과를 찾았습니다.")
+                for idx, item in enumerate(results, start=1):
+                    metadata = item.get("metadata", {})
+                    score = item.get("score")
+                    score_str = f"{score:.3f}" if isinstance(score, (int, float)) else "-"
+                    doc_id = metadata.get("id") or item.get("id") or "알 수 없음"
+                    content_type = metadata.get("content_type", "미지정")
+                    source_payload = metadata.get("source", {})
+                    image_url = source_payload.get("image_url")
+
+                    header_meta = (
+                        f"{idx}. 유형: {content_type} · 점수: {score_str} · 문서: {doc_id}"
+                    )
+                    summary_text = item.get("text", "")
+                    summary_text = html.escape(summary_text)
+                    source_json = html.escape(json.dumps(source_payload, ensure_ascii=False, indent=2))
+                    image_markup = ""
+                    if image_url:
+                        tooltip = html.escape(f"{doc_id} (score {score_str})")
+                        image_markup = f'<img src="{image_url}" alt="{tooltip}" class="vector-card__image" title="자세한 정보를 보려면 클릭하세요" />'
+                    else:
+                        image_markup = (
+                            '<div class="vector-card__image" style="display:flex;align-items:center;'
+                            'justify-content:center;background:#f2f2f2;">이미지 없음</div>'
+                        )
+
+                    st.markdown(
+                        f"""
+                        <details class="vector-card">
+                          <summary>
+                            <div class="vector-card__header" title="클릭하거나 마우스를 올려 자세히 보기">
+                              {image_markup}
+                              <div class="vector-card__meta">{html.escape(header_meta)}</div>
+                            </div>
+                          </summary>
+                          <div class="vector-card__body">
+                            <strong>요약 텍스트</strong>
+                            <pre>{summary_text}</pre>
+                            <strong>원본 분석 결과</strong>
+                            <pre>{source_json}</pre>
+                          </div>
+                        </details>
+                        """,
+                        unsafe_allow_html=True,
+                    )

@@ -2,7 +2,7 @@
 from openai import OpenAI
 import json
 import ast  # 방어적 파싱을 위한 라이브러리
-
+from typing import Optional
 
 
 # Function tool schema:  중요도 반영, 중요도는 순위가 아니라 등급으로 반영.
@@ -348,3 +348,22 @@ def aggregate_user_profile_before_after(objective_data_points):
     after_profile = aggregate_user_profile(after_points)
     
     return before_profile, after_profile
+
+
+def index_objective_result(dar: dict, doc_id: str, vs: Optional[object] = None, use_normalized: bool = True) -> bool:
+    """
+    analyze_text_objective()가 만든 DAR을 벡터스토어에 추가하는 얇은 래퍼.
+    - dar: analyze_text_objective() 결과 딕셔너리
+    - doc_id: 이 문서를 식별할 ID (파일명/UUID 등)
+    - vs: (옵션) 외부에서 만든 VectorStore 인스턴스
+    - use_normalized: True면 정제된 필드(main_topics/entities/keywords) 우선
+    """
+    try:
+        from src.embeddings import VectorStore
+        store = vs or VectorStore()   # st.secrets에서 API 키를 자동 사용
+        store.add_objective_results([(doc_id, dar)], use_normalized_fields=use_normalized)
+        return True
+    except Exception as e:
+        import streamlit as st
+        st.error(f"인덱싱 오류: {e}")
+        return False

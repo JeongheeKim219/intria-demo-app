@@ -3,3 +3,4 @@
 .streamlit/secrets.toml
 __pycache__/
 .vscode/settings.json
+data/vector_store/

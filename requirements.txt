@@ -3,5 +3,7 @@ streamlit
 pandas
 boto3
 openai
+faiss-cpu
+numpy
 requests
 pillow
