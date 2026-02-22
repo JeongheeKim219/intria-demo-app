@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
@@ -5,6 +8,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
 
 
 class JobStatus(str, Enum):
