@@ -8,6 +8,8 @@ from typing import Any, Dict, Iterable, List, Optional
 import numpy as np
 from openai import OpenAI
 
+from src.config import get_openai_api_key
+
 try:  # FAISS 설치 여부는 실제 사용 시점에 확인
     import faiss  # type: ignore
 except ImportError:  # pragma: no cover - 런타임에서 안내
@@ -23,16 +25,7 @@ def _resolve_api_key(explicit: Optional[str]) -> str:
     """프로젝트 규칙에 맞춰 OpenAI API 키를 찾는다."""
     if explicit:
         return explicit
-    try:
-        import streamlit as st  # type: ignore
-
-        key = st.secrets["openai"]["api_key"]
-        if key:
-            return key
-    except Exception as exc:
-        raise RuntimeError(
-            "OpenAI API key not found. Configure st.secrets['openai']['api_key']."
-        ) from exc
+    return get_openai_api_key()
 
 
 def _ensure_faiss() -> None:

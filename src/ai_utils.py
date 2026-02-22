@@ -1,8 +1,13 @@
-﻿import streamlit as st
-from openai import OpenAI
+﻿import ast  # 방어적 파싱을 위한 라이브러리
 import json
-import ast  # 방어적 파싱을 위한 라이브러리
+import logging
 from typing import Optional
+
+from openai import OpenAI
+
+from src.config import MissingConfigError, get_openai_api_key
+
+logger = logging.getLogger(__name__)
 
 
 # Function tool schema:  중요도 반영, 중요도는 순위가 아니라 등급으로 반영.
@@ -144,7 +149,7 @@ def analyze_text_objective(text):
         return {"error": "분석할 텍스트가 없습니다."}
 
     try:
-        client = OpenAI(api_key=st.secrets["openai"]["api_key"])
+        client = OpenAI(api_key=get_openai_api_key())
 
         messages = [
             {
@@ -175,7 +180,7 @@ def analyze_text_objective(text):
         )
 
         result_json = response.choices[0].message.tool_calls[0].function.arguments
-        st.success("객관 정보 분석 완료")
+        logger.info("객관 정보 분석 완료")
         parsed = json.loads(result_json)
         dar = parsed.get("data_analysis_results", parsed)
 
@@ -197,8 +202,10 @@ def analyze_text_objective(text):
 
         return dar
 
+    except MissingConfigError:
+        raise
     except Exception as e:
-        st.error(f"객관 정보 분석 오류: {e}")
+        logger.error("객관 정보 분석 오류: %s", e)
 
 
 # Function tool schema: aggregate creative profile (kept as strings)
@@ -242,7 +249,7 @@ def aggregate_user_profile(objective_data_points):
         return None
 
     try:
-        client = OpenAI(api_key=st.secrets["openai"]["api_key"])
+        client = OpenAI(api_key=get_openai_api_key())
 
 
         messages = [
@@ -275,12 +282,14 @@ def aggregate_user_profile(objective_data_points):
         )
 
         result_json = response.choices[0].message.tool_calls[0].function.arguments
-        st.success("집계 프로필 생성 완료")
+        logger.info("집계 프로필 생성 완료")
         parsed = json.loads(result_json)
         return parsed.get("creative_profiling_results", parsed)
 
+    except MissingConfigError:
+        raise
     except Exception as e:
-        st.error(f"프로필 생성 오류: {e}")
+        logger.error("프로필 생성 오류: %s", e)
         return None
     
 
@@ -341,10 +350,10 @@ def aggregate_user_profile_before_after(objective_data_points):
         })
 
     # 이제 제대로 작동하는 aggregate_user_profile 함수를 각각 호출합니다.
-    st.info("정제 전(Before) 데이터로 프로파일링을 시작합니다...")
+    logger.info("정제 전(Before) 데이터로 프로파일링을 시작합니다...")
     before_profile = aggregate_user_profile(before_points)
     
-    st.info("정제 후(After) 데이터로 프로파일링을 시작합니다...")
+    logger.info("정제 후(After) 데이터로 프로파일링을 시작합니다...")
     after_profile = aggregate_user_profile(after_points)
     
     return before_profile, after_profile
@@ -360,10 +369,12 @@ def index_objective_result(dar: dict, doc_id: str, vs: Optional[object] = None, 
     """
     try:
         from src.embeddings import VectorStore
-        store = vs or VectorStore()   # st.secrets에서 API 키를 자동 사용
+        store = vs or VectorStore()   # config.py 기반 환경변수에서 API 키를 자동 사용
         store.add_objective_results([(doc_id, dar)], use_normalized_fields=use_normalized)
         return True
+    except MissingConfigError:
+        raise
     except Exception as e:
-        import streamlit as st
-        st.error(f"인덱싱 오류: {e}")
+        logger.error("인덱싱 오류: %s", e)
         return False
+
