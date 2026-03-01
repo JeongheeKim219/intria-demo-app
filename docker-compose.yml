@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: intria-postgres
+    environment:
+      POSTGRES_USER: intria
+      POSTGRES_PASSWORD: intria_pw
+      POSTGRES_DB: intria_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - intria_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intria -d intria_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  intria_pgdata:
