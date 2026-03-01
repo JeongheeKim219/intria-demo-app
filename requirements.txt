@@ -10,3 +10,6 @@ pillow
 fastapi
 uvicorn
 dotenv
+SQLAlchemy
+psycopg2-binary
+python-dotenv

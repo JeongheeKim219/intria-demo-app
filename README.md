@@ -33,3 +33,9 @@ AI 기술과 확장 가능한 클라우드 아키텍처를 적용하여, 스크�
 + AI / ML:
     + OCR: pytesseract/Naver Clova OCR (초기), AWS Textract (확장)
     + LLM: OpenAI GPT API (gpt-3.5-turbo, gpt-4)
+
+
+## 4. 설치 커맨드
++ pip install -r requirements.txt
++ docker compose up -d
++ python -m scripts.init_db
