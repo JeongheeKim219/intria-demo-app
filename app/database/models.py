@@ -1,15 +1,23 @@
-# models.py
+import json
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey
+
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+
 from app.database.db import Base
+
 
 def utcnow():
     return datetime.now(timezone.utc)
 
+
 class Job(Base):
     __tablename__ = "jobs"
+    __table_args__ = (
+        Index("ix_jobs_user_id_job_id", "user_id", "job_id"),
+    )
 
     job_id = Column(String, primary_key=True)
+    user_id = Column(String, nullable=False)
     status = Column(String, nullable=False)          # queued/running/succeeded/failed
     progress = Column(Integer, nullable=False, default=0)
     current_step = Column(String, nullable=True)     # start/ocr/analysis/indexing
@@ -19,12 +27,17 @@ class Job(Base):
     error_message = Column(Text, nullable=True)
 
     source_url = Column(Text, nullable=True)
-    item_id = Column(String, nullable=True)          # succeeded 시 연결
+    item_id = Column(String, nullable=True)
 
     metadata_json = Column(Text, nullable=False, default="{}")
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    def metadata_dict(self):
+        # API 응답에서는 JSON 문자열을 dict로 복원해서 반환한다.
+        return json.loads(self.metadata_json or "{}")
+
 
 class Item(Base):
     __tablename__ = "items"
@@ -35,6 +48,7 @@ class Item(Base):
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
+
 class OCRResult(Base):
     __tablename__ = "ocr_results"
 
@@ -44,6 +58,7 @@ class OCRResult(Base):
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
+
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
 
@@ -51,6 +66,7 @@ class AnalysisResult(Base):
     objective_json = Column(Text, nullable=False)
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
 
 class EmbeddingRef(Base):
     __tablename__ = "embeddings"
